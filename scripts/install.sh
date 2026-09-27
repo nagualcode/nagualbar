@@ -177,8 +177,20 @@ rewrite_shell_config --arg section "$SECTION" '
 # write of its own config and the bar swaps in one step with the layout already
 # in its new shape.
 
-if ! omarchy-shell shell enablePlugin "$NAGUALBAR_ID" '{}' >/dev/null; then
-  fail "the shell refused to switch bars; run: omarchy-shell shell enablePlugin $NAGUALBAR_ID '{}'"
+# Retried: swapping the bar makes the shell rebuild its window tree, and for a
+# moment it answers no IPC at all. A first attempt landing in that window fails
+# for a reason that has already resolved itself, so try again before treating it
+# as a real refusal.
+enabled=0
+for attempt in 1 2 3 4 5; do
+  if omarchy-shell shell enablePlugin "$NAGUALBAR_ID" '{}' >/dev/null 2>&1; then
+    enabled=1
+    break
+  fi
+  sleep 1
+done
+if (( ! enabled )); then
+  fail "the shell would not switch bars; run: omarchy-shell shell enablePlugin $NAGUALBAR_ID '{}'"
 fi
 
 cat <<DONE
