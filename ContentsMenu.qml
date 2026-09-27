@@ -37,15 +37,24 @@ KeyboardPanel {
     return count
   }
 
+  // "row" is an icon: the switch means visible, and flipping it hides. "option"
+  // is a bar setting: the switch means enabled, and flipping it turns it on.
+  // Both are reachable with the keyboard, so navigation steps over either.
+  function isToggleable(row) {
+    return !!row && (row.kind === "row" || row.kind === "option")
+  }
+
   function rowKey(index) {
     var row = rows[index]
-    return row && row.kind === "row" ? String(row.key || "") : ""
+    return isToggleable(row) ? String(row.key || "") : ""
   }
 
   function toggleRow(index) {
-    var key = rowKey(index)
-    if (key === "" || !bar) return
-    bar.setHiddenKey(key, !bar.isHiddenKey(key))
+    var row = rows[index]
+    if (!isToggleable(row) || !bar) return
+    var key = String(row.key || "")
+    if (row.kind === "option") bar.setOption(key, !bar.optionEnabled(key))
+    else bar.setHiddenKey(key, !bar.isHiddenKey(key))
   }
 
   // Navigation steps over the toggleable rows only, so the cursor never lands
@@ -55,7 +64,7 @@ KeyboardPanel {
     for (var i = 0; i < rows.length; i++) {
       index += step
       if (index < 0 || index >= rows.length) return -1
-      if (rows[index] && rows[index].kind === "row") return index
+      if (isToggleable(rows[index])) return index
     }
     return -1
   }
@@ -72,7 +81,7 @@ KeyboardPanel {
   function tabCursor(step) {
     var next = cursorIndex < 0 ? (step > 0 ? 0 : rows.length - 1) : cursorIndex + step
     while (next >= 0 && next < rows.length) {
-      if (rows[next] && rows[next].kind === "row") {
+      if (isToggleable(rows[next])) {
         cursorActive = true
         cursorIndex = next
         Qt.callLater(revealCursor)
@@ -119,7 +128,7 @@ KeyboardPanel {
     var key = rowKey(cursorIndex)
     if (key === "") return
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i] && rows[i].kind === "row" && String(rows[i].key || "") === key) {
+      if (isToggleable(rows[i]) && String(rows[i].key || "") === key) {
         cursorIndex = i
         return
       }
@@ -250,12 +259,19 @@ KeyboardPanel {
 
     readonly property bool isHeader: modelData && modelData.kind === "header"
     readonly property bool isRow: modelData && modelData.kind === "row"
-    readonly property bool hidden: isRow && menu ? menu.bar.isHiddenKey(String(modelData.key || "")) : false
-    readonly property bool cursorHere: isRow && menu ? menu.cursorActive && menu.cursorIndex === rowIndex : false
+    readonly property bool isOption: modelData && modelData.kind === "option"
+    readonly property bool toggleable: row.isRow || row.isOption
+    readonly property bool hidden: row.isRow && menu ? menu.bar.isHiddenKey(String(modelData.key || "")) : false
+    readonly property bool cursorHere: row.toggleable && menu ? menu.cursorActive && menu.cursorIndex === rowIndex : false
+    // One property for the switch and the label colour, so the two can never
+    // disagree about what is on.
+    readonly property bool on: row.isOption
+      ? (menu && menu.bar ? menu.bar.optionEnabled(String(modelData.key || "")) : false)
+      : !row.hidden
 
     implicitHeight: isHeader ? Style.space(22) : Style.spacing.popupRowHeight
     height: implicitHeight
-    visible: isHeader || isRow
+    visible: isHeader || toggleable
     radius: Style.cornerRadius
     color: cursorHere ? Style.hoverFillFor(menu.foreground, menu.accent, menu.urgent) : "transparent"
     borderSpec: cursorHere
@@ -276,15 +292,17 @@ KeyboardPanel {
 
     Text {
       id: sectionTag
-      visible: row.isRow
+      visible: row.toggleable
       anchors.left: parent.left
       anchors.leftMargin: Style.spacing.sm
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(26)
-      text: row.modelData && row.modelData.section
+      // Icons are tagged with the bar section they sit in; an option has no
+      // section, so it gets a tag of its own rather than a blank cell.
+      text: row.isOption ? "W" : (row.modelData && row.modelData.section
         ? String(row.modelData.section).charAt(0).toUpperCase()
-        : ""
-      color: row.hidden ? row.menu.dim : row.menu.accent
+        : "")
+      color: row.on ? row.menu.accent : row.menu.dim
       font.family: row.menu.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true
@@ -292,27 +310,29 @@ KeyboardPanel {
     }
 
     Text {
-      visible: row.isRow
+      visible: row.toggleable
       anchors.left: sectionTag.right
       anchors.leftMargin: Style.spacing.sm
       anchors.right: switchItem.left
       anchors.rightMargin: Style.spacing.sm
       anchors.verticalCenter: parent.verticalCenter
       text: row.modelData ? String(row.modelData.label || "") : ""
-      color: row.hidden ? row.menu.dim : row.menu.foreground
+      color: row.on ? row.menu.foreground : row.menu.dim
       font.family: row.menu.fontFamily
       font.pixelSize: Style.font.bodySmall
+      // Only a parked icon is struck through. An option that is off is a
+      // setting you have not turned on, not something that was taken away.
       font.strikeout: row.hidden
       elide: Text.ElideRight
     }
 
     ToggleSwitch {
       id: switchItem
-      visible: row.isRow
+      visible: row.toggleable
       anchors.right: parent.right
       anchors.rightMargin: Style.spacing.sm
       anchors.verticalCenter: parent.verticalCenter
-      checked: !row.hidden
+      checked: row.on
       hasCursor: row.cursorHere
       // The row's MouseArea owns the click; a second one here would swallow it.
       interactive: false
@@ -323,7 +343,7 @@ KeyboardPanel {
 
     MouseArea {
       id: rowPointer
-      visible: row.isRow
+      visible: row.toggleable
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor

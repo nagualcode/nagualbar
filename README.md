@@ -52,10 +52,10 @@ a click that lands on a widget is never stolen.
 
 | Key | Does |
 | --- | --- |
-| Arrow keys | Move between icons |
-| Tab | Move between the widget list and the indicator list |
-| Enter or Space | Hide or show the highlighted icon |
-| A | Show everything again |
+| Arrow keys | Move between switches |
+| Tab | Move through the list |
+| Enter or Space | Flip the highlighted switch |
+| A | Show every icon again |
 | Escape | Close |
 
 Hidden entries stay in the list, dimmed and struck through, so a mis-click is
@@ -96,6 +96,33 @@ with:
 omarchy-shell nagualbar.indicators refresh
 ```
 
+## Windows under the bar
+
+The first switch in the menu, under **BAR**, stops the bar from reserving screen
+space. With it on, tiled and fullscreen windows line up with the top of the
+screen instead of being pushed below the bar, and the bar stays drawn on top of
+them.
+
+This works because the bar is a layer surface: it only holds windows down by
+claiming exclusive space. Drop the claim and windows stop making room for it,
+while the surface itself is untouched and keeps painting over whatever is behind
+it. Nothing is moved, restacked, or re-rendered.
+
+It is worth it if you would rather have the full height than a bar-shaped gap,
+and it costs you the top of your windows when something scrolls under the bar.
+
+Without a mouse:
+
+```bash
+omarchy-shell omarchy.bar toggleWindowOverlap
+```
+
+It prints the state it landed on, `on` or `off`.
+
+Note that Hyprland lays tiled windows out inside the workarea, which is derived
+from the reserved area. If a window opens floating, that is your own window rule
+and it is unaffected.
+
 ## Which icons are hidden
 
 `~/.config/omarchy/nagualbar.json`, written by the bar only when a switch
@@ -103,13 +130,16 @@ actually changes:
 
 ```json
 {
-  "version": 1,
-  "hidden": ["omarchy.audio", "Dnd"]
+  "version": 2,
+  "hidden": ["omarchy.audio", "Dnd"],
+  "overlap": false
 }
 ```
 
-Keys are widget ids for widgets and indicator ids for indicators. The file is
-watched, so editing it by hand takes effect immediately. Delete it to start over.
+Keys are widget ids for widgets and indicator ids for indicators. `overlap` is
+the window-overlap switch above. The file is watched, so editing it by hand takes
+effect immediately. Delete it to start over. A `version: 1` file written by an
+older nagualbar has no `overlap` key and reads back as off.
 
 ## Uninstall
 

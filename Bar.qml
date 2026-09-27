@@ -127,6 +127,11 @@ Item {
   readonly property var indicatorEntries: IndicatorModel.list()
   readonly property string indicatorsSection: resolveIndicatorsSection()
   readonly property bool indicatorsEnabled: indicatorsSection !== "off"
+  // nagualbar: window overlap. When on, the bar stops reserving screen space
+  // and windows tile under it; read straight off the store so the binding on
+  // exclusionMode below follows it, including a change made in another process.
+  readonly property bool overlapWindows: hiddenStore.overlap
+  readonly property string overlapOptionId: "nagualbar.overlap"
   // nagualbar: which monitor's contents menu is open, so a right-click on one
   // monitor closes the menu another monitor left open instead of stacking two.
   // nagualbar: every live CenterGestureArea, one per screen. Tracked by hand
@@ -682,6 +687,19 @@ Item {
     return IndicatorModel.ids()
   }
 
+  // nagualbar: bar options, as opposed to per-icon visibility. Kept separate
+  // from the hidden set because an option reads as "the switch is on", while a
+  // visibility row reads as "the icon is on" — the same gesture, opposite
+  // meaning, and inverting one of them in the menu would just be confusing.
+  function optionEnabled(key) {
+    return String(key || "") === root.overlapOptionId && root.overlapWindows
+  }
+
+  function setOption(key, value) {
+    if (String(key || "") !== root.overlapOptionId) return
+    hiddenStore.setOverlap(value === true)
+  }
+
   // Display metadata for a bar entry. Reads `widgets` rather than calling
   // metadataFor so the binding stays live if the host swaps the snapshot out
   // when a widget plugin is enabled.
@@ -723,10 +741,21 @@ Item {
   // widgets first (grouped by the section they sit in), then the indicator row
   // and its individual icons. Hidden entries stay listed — the widget is still
   // there, only its icon is parked — so they read as dimmed, not absent.
+  //
+  // The BAR section comes first and holds options rather than icons, so the two
+  // icon sections stay adjacent and a mode is never mistaken for a widget.
   function contentsRows() {
     var rows = []
     var sections = ["left", "center", "right"]
     var widgets = 0
+
+    rows.push({ kind: "header", label: "BAR" })
+    rows.push({
+      kind: "option",
+      key: overlapOptionId,
+      label: "Windows under the bar",
+      description: "Tiled and fullscreen windows line up with the top of the screen instead of below the bar. The bar stays drawn on top of them."
+    })
 
     for (var s = 0; s < sections.length; s++) {
       var entries = layoutEntries(sections[s])
@@ -1412,6 +1441,13 @@ Item {
     function toggleContentsMenu(): string {
       return root.toggleContentsMenu()
     }
+
+    // nagualbar: same idea for the window-overlap option, so it can be bound
+    // to a key and tested without a mouse. Returns the resulting state.
+    function toggleWindowOverlap(): string {
+      hiddenStore.toggleOverlap()
+      return root.overlapWindows ? "on" : "off"
+    }
   }
 
   Variants {
@@ -1461,7 +1497,12 @@ Item {
     // textures — which measures ~150ms against ~20ms to tear down. Parking
     // keeps the surface alive, so showing is only a margin change.
     visible: !remapGuard.remapping
-    exclusionMode: root.barHidden ? ExclusionMode.Ignore : ExclusionMode.Auto
+    // Two separate reasons to stop reserving space, and only one of them moves
+    // the bar. A hidden bar has nothing left to overlap, so it releases the
+    // screen; an overlap bar stays exactly where it is and simply stops pushing
+    // windows down. The surface is a layer surface either way, so it keeps
+    // painting on top of whatever the windows do underneath.
+    exclusionMode: (root.barHidden || root.overlapWindows) ? ExclusionMode.Ignore : ExclusionMode.Auto
 
     ScreenMoveRemap {
       id: remapGuard

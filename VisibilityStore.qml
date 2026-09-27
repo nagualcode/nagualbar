@@ -2,7 +2,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Persisted "which bar icons are hidden" state for nagualbar.
+// Persisted nagualbar state: which bar icons are hidden, and whether windows
+// are allowed to sit under the bar.
 //
 // The state lives in its own file instead of `shell.json` on purpose. A
 // shell.json write reassigns the bar's `layout` property, and the bar can only
@@ -23,6 +24,9 @@ QtObject {
   // Array of hidden keys. Reassigned (never mutated in place) so QML bindings
   // that read it through isHidden() re-evaluate.
   property var hidden: []
+  // When true the bar stops reserving screen space, so tiled and fullscreen
+  // windows line up with the top of the screen and the bar draws over them.
+  property bool overlap: false
   property bool loaded: false
 
   signal changed()
@@ -72,9 +76,23 @@ QtObject {
     persist()
   }
 
+  // Set on the property rather than derived from `hidden`, so it is a plain
+  // bool the PanelWindow binding can read without a function call per frame.
+  function setOverlap(value) {
+    var next = (value === true)
+    if (next === overlap) return
+    overlap = next
+    persist()
+  }
+
+  function toggleOverlap() {
+    setOverlap(!overlap)
+  }
+
   // Re-read from disk. A malformed or missing file is treated as "nothing
-  // hidden" rather than an error: a typo in a hand-edited config should cost
-  // the user their icon layout, not their bar.
+  // hidden, no overlap" rather than an error: a typo in a hand-edited config
+  // should cost the user their icon layout, not their bar. A version 1 file
+  // predates the overlap flag and reads back as off, which is what it meant.
   function apply(raw) {
     var parsed = {}
     try {
@@ -89,14 +107,18 @@ QtObject {
       if (id !== "" && clean.indexOf(id) === -1) clean.push(id)
     }
     clean.sort()
+    var overlapNext = (parsed && parsed.overlap === true)
 
-    if (JSON.stringify(clean) === JSON.stringify(hidden)) return
+    // Both fields are compared, so a change to either one re-evaluates the
+    // bindings that read it.
+    if (JSON.stringify(clean) === JSON.stringify(hidden) && overlapNext === overlap) return
     hidden = clean
+    overlap = overlapNext
     changed()
   }
 
   function persist() {
-    stateFile.setText(JSON.stringify({ version: 1, hidden: hidden }, null, 2) + "\n")
+    stateFile.setText(JSON.stringify({ version: 2, hidden: hidden, overlap: overlap }, null, 2) + "\n")
     changed()
   }
 
