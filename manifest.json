@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "nagualbar",
+  "name": "Nagualbar",
+  "version": "1.0.0",
+  "author": "nagualcode",
+  "description": "Omarchy bar clone with a right-click contents menu that shows or hides every bar icon",
+  "kinds": [
+    "bar"
+  ],
+  "entryPoints": {
+    "bar": "Bar.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.bar"
+  }
+}
